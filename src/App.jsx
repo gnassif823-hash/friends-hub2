@@ -5,7 +5,8 @@ import Dashboard from './pages/Dashboard';
 import LiveMap from './pages/LiveMap';
 import GroupLounge from './pages/GroupLounge';
 import CallCenter from './pages/CallCenter';
-import Settings from './pages/Settings';
+import Events from './pages/Events';
+import Gallery from './pages/Gallery';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
 import ProfileSetup from './pages/ProfileSetup';
@@ -41,8 +42,9 @@ function App() {
             <Route index element={<Dashboard />} />
             <Route path="map" element={<LiveMap />} />
             <Route path="lounge" element={<GroupLounge />} />
+            <Route path="events" element={<Events />} />
+            <Route path="gallery" element={<Gallery />} />
             <Route path="calls" element={<CallCenter />} />
-            <Route path="settings" element={<Settings />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
