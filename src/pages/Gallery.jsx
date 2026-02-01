@@ -1,198 +1,167 @@
 import React, { useState, useEffect } from 'react';
-import { useAppContext } from '../context/AppContext';
-import { supabase } from '../lib/supabaseClient';
-import { Image as ImageIcon, Upload, X, Loader2, Trash2 } from 'lucide-react';
-import clsx from 'clsx';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
+import { Upload, Plus, X } from 'lucide-react';
 
 const Gallery = () => {
-    const { currentUser } = useAppContext();
+    const { user } = useAuth();
     const [photos, setPhotos] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
-    const [selectedPhoto, setSelectedPhoto] = useState(null);
+    const [showUploadModal, setShowUploadModal] = useState(false);
+    const [file, setFile] = useState(null);
+    const [caption, setCaption] = useState('');
+
+    const fetchPhotos = async () => {
+        const { data } = await supabase
+            .from('photos')
+            .select('*, profiles:uploader_id(username, avatar_url)')
+            .order('created_at', { ascending: false });
+
+        if (data) setPhotos(data);
+    };
 
     useEffect(() => {
-        if (!supabase) {
-            setLoading(false);
-            return;
-        }
-
         fetchPhotos();
 
         const channel = supabase
-            .channel('public:gallery_posts')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gallery_posts' }, (payload) => {
-                setPhotos(prev => [payload.new, ...prev]);
-            })
-            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gallery_posts' }, (payload) => {
-                setPhotos(prev => prev.filter(p => p.id !== payload.old.id));
-                if (selectedPhoto && selectedPhoto.id === payload.old.id) {
-                    setSelectedPhoto(null);
-                }
+            .channel('public:photos')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'photos' }, (payload) => {
+                // We need to fetch the profile for the new photo
+                // For simplicity/rapidity in this "real-time" demo, we just refetch all or we could fetch single
+                fetchPhotos();
             })
             .subscribe();
 
-        return () => supabase.removeChannel(channel);
-    }, [selectedPhoto]);
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
 
-    const fetchPhotos = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('gallery_posts')
-                .select('*')
-                .order('created_at', { ascending: false });
-
-            if (data) setPhotos(data);
-        } catch (e) { console.error(e); }
-        finally { setLoading(false); }
-    };
-
-    const handleFileUpload = async (e) => {
-        const file = e.target.files[0];
+    const handleUpload = async (e) => {
+        e.preventDefault();
         if (!file) return;
 
         setUploading(true);
         try {
+            // 1. Upload to Storage
             const fileExt = file.name.split('.').pop();
             const fileName = `${Math.random()}.${fileExt}`;
             const filePath = `${fileName}`;
 
-            // 1. Upload to Storage
             const { error: uploadError } = await supabase.storage
                 .from('gallery')
                 .upload(filePath, file);
 
             if (uploadError) throw uploadError;
 
-            // 2. Get Public URL
             const { data: { publicUrl } } = supabase.storage
                 .from('gallery')
                 .getPublicUrl(filePath);
 
-            // 3. Insert into Database
-            const { error: dbError } = await supabase.from('gallery_posts').insert({
-                image_url: publicUrl,
-                caption: '',
-                uploaded_by: currentUser.id
-            });
+            // 2. Insert into DB
+            const { error: dbError } = await supabase
+                .from('photos')
+                .insert([{
+                    uploader_id: user.id,
+                    url: publicUrl,
+                    caption: caption
+                }]);
 
             if (dbError) throw dbError;
 
+            setShowUploadModal(false);
+            setFile(null);
+            setCaption('');
         } catch (error) {
-            console.error('Upload failed:', error);
-            alert('Upload failed: ' + error.message);
+            console.error('Upload error:', error);
+            alert('Failed to upload. Make sure "gallery" bucket exists and is public.');
         } finally {
             setUploading(false);
         }
     };
 
-    // Note: We are just deleting the DB record. Strict implementation would also delete from storage bucket.
-    const handleDeletePhoto = async (photoId, e) => {
-        if (e) e.stopPropagation();
-
-        if (!confirm('Are you sure you want to delete this photo?')) return;
-
-        const { error } = await supabase
-            .from('gallery_posts')
-            .delete()
-            .eq('id', photoId);
-
-        if (error) {
-            console.error(error);
-            alert('Failed to delete photo');
-        } else {
-            if (selectedPhoto?.id === photoId) setSelectedPhoto(null);
-        }
-    };
-
     return (
-        <div className="h-full bg-slate-950 text-slate-100 p-4 overflow-auto pb-20">
-            <div className="flex justify-between items-center mb-6">
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
                 <div>
-                    <h1 className="text-2xl font-bold flex items-center gap-2">
-                        <ImageIcon className="text-purple-400" /> Shared Memories
-                    </h1>
-                    <p className="text-slate-400 text-sm">Best moments with the crew</p>
+                    <h1 className="text-3xl font-bold">Photo Gallery</h1>
+                    <p className="text-slate-400">Memories from the hangouts.</p>
                 </div>
-
-                <label className="cursor-pointer bg-purple-600 hover:bg-purple-500 text-white p-3 rounded-xl shadow-lg shadow-purple-900/20 transition-all flex items-center gap-2">
-                    {uploading ? <Loader2 className="animate-spin" size={20} /> : <Upload size={20} />}
-                    <span className="hidden md:inline">Upload Photo</span>
-                    <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleFileUpload}
-                        disabled={uploading}
-                    />
-                </label>
+                <button
+                    onClick={() => setShowUploadModal(true)}
+                    className="bg-pink-600 hover:bg-pink-500 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-bold transition-colors"
+                >
+                    <Plus className="w-5 h-5" />
+                    Add Photo
+                </button>
             </div>
 
-            {loading ? (
-                <div className="flex justify-center mt-10"><Loader2 className="animate-spin text-purple-400" size={40} /></div>
-            ) : photos.length === 0 ? (
-                <div className="text-center mt-20 p-8 bg-slate-900/50 rounded-3xl border border-slate-800 border-dashed">
-                    <ImageIcon className="w-16 h-16 text-slate-700 mx-auto mb-4" />
-                    <h3 className="text-xl font-bold text-slate-300">No photos yet</h3>
-                    <p className="text-slate-500 mb-6">Share the first memory!</p>
-                </div>
-            ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {photos.map(photo => (
-                        <div
-                            key={photo.id}
-                            onClick={() => setSelectedPhoto(photo)}
-                            className="aspect-square rounded-xl overflow-hidden relative group cursor-pointer border border-slate-800 hover:border-purple-500/50 transition-colors"
-                        >
-                            <img
-                                src={photo.image_url}
-                                alt="Memory"
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                loading="lazy"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3 justify-between">
-                                <span className="text-xs text-white/90">
-                                    {new Date(photo.created_at).toLocaleDateString()}
-                                </span>
-                                {currentUser.id === photo.uploaded_by && (
-                                    <button
-                                        onClick={(e) => handleDeletePhoto(photo.id, e)}
-                                        className="p-1.5 bg-red-500/80 hover:bg-red-500 rounded-full text-white transition-colors"
-                                    >
-                                        <Trash2 size={14} />
-                                    </button>
-                                )}
-                            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {photos.map((photo) => (
+                    <div key={photo.id} className="group relative aspect-square bg-slate-900 rounded-xl overflow-hidden border border-slate-800">
+                        <img
+                            src={photo.url}
+                            alt={photo.caption}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4">
+                            <p className="text-white font-medium text-sm truncate">{photo.caption}</p>
+                            <p className="text-slate-400 text-xs">by {photo.profiles?.username}</p>
                         </div>
-                    ))}
-                </div>
-            )}
+                    </div>
+                ))}
+            </div>
 
-            {/* Lightbox Modal */}
-            {selectedPhoto && (
-                <div
-                    className="fixed inset-0 bg-black/95 z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200"
-                    onClick={() => setSelectedPhoto(null)}
-                >
-                    <button className="absolute top-4 right-4 text-white p-2 hover:bg-white/10 rounded-full z-50">
-                        <X size={32} />
-                    </button>
-                    {/* Delete button in lightbox too */}
-                    {currentUser.id === selectedPhoto.uploaded_by && (
+            {/* Upload Modal */}
+            {showUploadModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 relative shadow-2xl">
                         <button
-                            onClick={(e) => handleDeletePhoto(selectedPhoto.id, e)}
-                            className="absolute top-4 right-20 text-white/70 hover:text-red-400 p-2 z-50 flex items-center gap-2"
+                            onClick={() => setShowUploadModal(false)}
+                            className="absolute top-4 right-4 text-slate-400 hover:text-white"
                         >
-                            <Trash2 size={24} />
+                            <X className="w-6 h-6" />
                         </button>
-                    )}
 
-                    <img
-                        src={selectedPhoto.image_url}
-                        alt="Full size"
-                        className="max-h-[90vh] max-w-full rounded-lg shadow-2xl"
-                        onClick={(e) => e.stopPropagation()}
-                    />
+                        <h2 className="text-xl font-bold mb-4">Upload a Memory</h2>
+
+                        <form onSubmit={handleUpload} className="space-y-4">
+                            <div className="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => setFile(e.target.files[0])}
+                                    className="hidden"
+                                    id="file-upload"
+                                />
+                                <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center gap-2">
+                                    <Upload className="w-8 h-8 text-violet-500" />
+                                    <span className="text-sm text-slate-300">
+                                        {file ? file.name : "Click to select photo"}
+                                    </span>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-400 mb-1">Caption</label>
+                                <input
+                                    type="text"
+                                    value={caption}
+                                    onChange={(e) => setCaption(e.target.value)}
+                                    className="w-full bg-slate-800 border-slate-700 text-white rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-violet-500"
+                                    placeholder="#GoodTimes"
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={uploading || !file}
+                                className="w-full bg-gradient-to-r from-violet-600 to-pink-600 text-white font-bold py-3 rounded-xl disabled:opacity-50"
+                            >
+                                {uploading ? 'Uploading...' : 'Post Photo'}
+                            </button>
+                        </form>
+                    </div>
                 </div>
             )}
         </div>

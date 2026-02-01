@@ -1,84 +1,156 @@
-import React from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import { useAppContext } from '../context/AppContext';
-import { Icon } from 'leaflet';
-import markerIconPng from 'leaflet/dist/images/marker-icon.png';
+import React, { useEffect, useState, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css'; // Redundant if in index.css but safe
 
-// Fix for default Leaflet icon
-const DefaultIcon = new Icon({
-    iconUrl: markerIconPng,
+// Fix for default Leaflet marker icons in React
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+let DefaultIcon = L.icon({
+    iconUrl: icon,
+    shadowUrl: iconShadow,
     iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowUrl: null,
+    iconAnchor: [12, 41]
 });
 
-const LiveMap = () => {
-    const { friends } = useAppContext();
-    const availableFriends = friends.filter(f => f.status === 'Available' && f.coordinates);
+L.Marker.prototype.options.icon = DefaultIcon;
 
-    // Default center (NYC)
+// Component to handle user click on map to set location
+const LocationMarker = ({ setPosition, position }) => {
+    const map = useMapEvents({
+        click(e) {
+            setPosition(e.latlng);
+            map.flyTo(e.latlng, map.getZoom());
+        },
+    });
+
+    return position ? (
+        <Marker position={position}>
+            <Popup>You are here!</Popup>
+        </Marker>
+    ) : null;
+};
+
+const LiveMap = () => {
+    const { user, updateProfile } = useAuth();
+    const [friends, setFriends] = useState([]);
+    const [myPosition, setMyPosition] = useState(null);
+
+    // Custom Icon generator for friends
+    const createCustomIcon = (avatarUrl) => {
+        return L.divIcon({
+            html: `
+        <div class="relative">
+          <img src="${avatarUrl}" class="w-10 h-10 rounded-full border-2 border-white shadow-lg object-cover bg-slate-800" />
+          <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[8px] border-t-white"></div>
+        </div>
+      `,
+            className: 'bg-transparent',
+            iconSize: [40, 48],
+            iconAnchor: [20, 48],
+            popupAnchor: [0, -48]
+        });
+    };
+
+    useEffect(() => {
+        if (user.location_lat && user.location_lng) {
+            setMyPosition({ lat: user.location_lat, lng: user.location_lng });
+        }
+    }, [user]);
+
+    useEffect(() => {
+        // Save my position when it changes
+        if (myPosition) {
+            updateProfile({
+                location_lat: myPosition.lat,
+                location_lng: myPosition.lng
+            });
+        }
+    }, [myPosition]);
+
+    useEffect(() => {
+        const fetchFriends = async () => {
+            const { data } = await supabase
+                .from('profiles')
+                .select('*')
+                .neq('id', user.id)
+                .not('location_lat', 'is', null); // Only friends with location
+
+            if (data) setFriends(data);
+        };
+
+        fetchFriends();
+
+        const channel = supabase
+            .channel('public:map_profiles')
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
+                if (payload.new.id === user.id) return;
+                setFriends((prev) => {
+                    const exists = prev.find(f => f.id === payload.new.id);
+                    if (exists) {
+                        return prev.map(f => f.id === payload.new.id ? payload.new : f);
+                    } else if (payload.new.location_lat) {
+                        return [...prev, payload.new];
+                    }
+                    return prev;
+                });
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
+    // Default center (New Yorkish) if no location
     const defaultCenter = [40.7128, -74.0060];
+    const center = myPosition || defaultCenter;
 
     return (
-        <div className="h-full w-full relative bg-slate-950">
+        <div className="h-[calc(100vh-8rem)] md:h-[calc(100vh-5rem)] rounded-2xl overflow-hidden border border-slate-800 shadow-2xl relative">
             <MapContainer
-                center={defaultCenter}
+                center={center}
                 zoom={13}
-                style={{ height: '100%', width: '100%' }}
                 scrollWheelZoom={true}
-                className="z-0"
+                style={{ height: '100%', width: '100%' }}
+                className="bg-slate-900 z-0"
             >
                 <TileLayer
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
                 />
 
-                {/* Render Friends Markers */}
-                {availableFriends.map(friend => (
-                    <Marker
-                        key={friend.id}
-                        position={friend.coordinates}
-                        icon={DefaultIcon}
-                    >
-                        <Popup className="custom-popup">
-                            <div className="text-center">
-                                <img src={friend.avatar} alt={friend.username} className="w-10 h-10 rounded-full mx-auto mb-2 border-2 border-slate-900" />
-                                <div className="font-bold text-slate-900">{friend.username}</div>
-                                <div className="text-sm text-slate-500">{friend.location}</div>
-                                <div className="text-xs italic mt-1 text-slate-600">"{friend.message}"</div>
-                            </div>
-                        </Popup>
-                    </Marker>
+                {/* Friends Markers */}
+                {friends.map(friend => (
+                    (friend.location_lat && friend.location_lng) && (
+                        <Marker
+                            key={friend.id}
+                            position={[friend.location_lat, friend.location_lng]}
+                            icon={createCustomIcon(friend.avatar_url || `https://api.dicebear.com/9.x/avataaars/svg?seed=${friend.username}`)}
+                        >
+                            <Popup className="custom-popup">
+                                <div className="text-center">
+                                    <strong className="block text-slate-900">{friend.username}</strong>
+                                    <span className="text-xs text-slate-500">{friend.status}</span>
+                                </div>
+                            </Popup>
+                        </Marker>
+                    )
                 ))}
 
-                {/* POI Markers (Mock) */}
-                <Marker position={[40.7200, -74.0100]} icon={DefaultIcon}>
-                    <Popup>
-                        <strong>Central Perks Cafe</strong><br />
-                        Perfect spot for coffee!
-                    </Popup>
-                </Marker>
-
+                {/* My Marker Control */}
+                <LocationMarker setPosition={setMyPosition} position={myPosition} />
             </MapContainer>
 
-            {/* Overlay controls */}
-            <div className="absolute top-4 right-4 z-[500] bg-slate-900/90 backdrop-blur-md p-4 rounded-xl shadow-xl border border-slate-800 max-w-xs text-slate-100">
-                <h3 className="font-bold mb-3 border-b border-slate-700 pb-2">Active Friends</h3>
-                <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-                    {availableFriends.map(friend => (
-                        <div key={friend.id} className="flex items-center gap-3 text-sm cursor-pointer hover:bg-slate-800 p-2 rounded-lg transition-colors">
-                            <div className="relative">
-                                <img src={friend.avatar} alt={friend.username} className="w-6 h-6 rounded-full" />
-                                <div className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-green-500 border-2 border-slate-900 rounded-full"></div>
-                            </div>
-                            <span>{friend.username}</span>
-                        </div>
-                    ))}
-                    {availableFriends.length === 0 && <span className="text-slate-500 text-sm italic">No one is active.</span>}
+            {!myPosition && (
+                <div className="absolute bottom-6 left-6 z-[1000] bg-slate-900/90 text-white p-4 rounded-xl border border-slate-700 shadow-xl max-w-xs backdrop-blur">
+                    <h3 className="font-bold mb-1">Set your location</h3>
+                    <p className="text-sm text-slate-400">Click anywhere on the map to let friends know where you are!</p>
                 </div>
-            </div>
+            )}
         </div>
     );
 };

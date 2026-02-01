@@ -1,11 +1,46 @@
 @import "tailwindcss";
+@import 'leaflet/dist/leaflet.css';
 
-html,
-body,
-#root {
-  height: 100%;
+@theme {
+  --color-brand-primary: #8b5cf6;
+  /* Violet 500 */
+  --color-brand-secondary: #ec4899;
+  /* Pink 500 */
+  --color-status-online: #22c55e;
+  /* Green 500 */
+  --color-status-busy: #ef4444;
+  /* Red 500 */
+  --color-status-away: #f59e0b;
+  /* Amber 500 */
+
+  --font-sans: 'Inter', system-ui, sans-serif;
 }
 
-body {
-  @apply bg-slate-950 text-slate-100;
+/* Custom Base Styles for Deep Dark Theme */
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-bold tracking-tight text-white;
+  }
+}
+
+/* Scrollbar customization */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-slate-900;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-700 rounded-full hover:bg-slate-600;
 }
