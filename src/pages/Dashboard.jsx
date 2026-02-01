@@ -15,15 +15,21 @@ const Dashboard = () => {
 
     useEffect(() => {
         const fetchNextEvent = async () => {
-            const { data } = await supabase
-                .from('events')
-                .select('*')
-                .gte('event_date', new Date().toISOString())
-                .order('event_date', { ascending: true })
-                .limit(1)
-                .single();
+            if (!supabase) return;
+            try {
+                const { data } = await supabase
+                    .from('events')
+                    .select('*')
+                    .gte('event_date', new Date().toISOString())
+                    .order('event_date', { ascending: true })
+                    .limit(1)
+                    .single();
 
-            if (data) setNextEvent(data);
+                if (data) setNextEvent(data);
+            } catch (error) {
+                // Silent fail for notifications if table missing or other error
+                console.log('Notification fetch skipped:', error.message);
+            }
         };
 
         fetchNextEvent();
