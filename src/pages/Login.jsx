@@ -25,7 +25,8 @@ const Login = () => {
             navigate('/');
         } catch (err) {
             console.error(err);
-            setError('Failed to join. Please try again.');
+            // Show the actual error message to help debugging
+            setError(err.message || err.error_description || 'Failed to join. Check console.');
         } finally {
             setLoading(false);
         }
