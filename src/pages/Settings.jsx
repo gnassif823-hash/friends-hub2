@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Save, AlertCircle } from 'lucide-react';
+import { Save, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 const Settings = () => {
     const { user, updateProfile } = useAuth();
     const [username, setUsername] = useState(user?.username || '');
     const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || '');
     const [statusMessage, setStatusMessage] = useState(user?.status_message || '');
+    const [isVisible, setIsVisible] = useState(user?.is_visible !== false); // Default true
     const [message, setMessage] = useState({ type: '', text: '' });
     const [loading, setLoading] = useState(false);
 
@@ -19,7 +20,8 @@ const Settings = () => {
             await updateProfile({
                 username,
                 avatar_url: avatarUrl,
-                status_message: statusMessage
+                status_message: statusMessage,
+                is_visible: isVisible
             });
             setMessage({ type: 'success', text: 'Profile updated successfully!' });
         } catch (error) {
@@ -33,7 +35,7 @@ const Settings = () => {
         <div className="max-w-2xl mx-auto space-y-8">
             <div className="space-y-2">
                 <h2 className="text-3xl font-bold">Settings</h2>
-                <p className="text-slate-400">Manage your persona.</p>
+                <p className="text-slate-400">Manage your persona & privacy.</p>
             </div>
 
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8">
@@ -71,20 +73,32 @@ const Settings = () => {
                                 placeholder="https://..."
                                 className="w-full bg-slate-800 border-slate-700 text-slate-100 p-3 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none"
                             />
-                            <p className="text-xs text-slate-500 mt-2">
-                                Tip: Use <a href="https://dicebear.com" target="_blank" rel="noreferrer" className="text-violet-400 hover:underline">DiceBear</a> for cool avatars.
-                            </p>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-slate-400 mb-2">Status Message</label>
-                            <input
-                                type="text"
-                                value={statusMessage}
-                                onChange={(e) => setStatusMessage(e.target.value)}
-                                placeholder="What's on your mind?"
-                                className="w-full bg-slate-800 border-slate-700 text-slate-100 p-3 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none"
-                            />
+                            <label className="block text-sm font-medium text-slate-400 mb-2">Privacy</label>
+                            <div
+                                onClick={() => setIsVisible(!isVisible)}
+                                className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${isVisible
+                                        ? 'bg-violet-900/10 border-violet-500/30'
+                                        : 'bg-slate-800 border-slate-700'
+                                    }`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    {isVisible ? <Eye className="text-violet-400" /> : <EyeOff className="text-slate-400" />}
+                                    <div>
+                                        <p className={`font-bold ${isVisible ? 'text-violet-300' : 'text-slate-300'}`}>
+                                            {isVisible ? 'Visible on Map' : 'Ghost Mode (Hidden)'}
+                                        </p>
+                                        <p className="text-xs text-slate-500">
+                                            {isVisible ? 'Friends can see your location.' : 'You are invisible on the map.'}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className={`w-12 h-6 rounded-full relative transition-colors ${isVisible ? 'bg-violet-600' : 'bg-slate-700'}`}>
+                                    <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${isVisible ? 'left-7' : 'left-1'}`}></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

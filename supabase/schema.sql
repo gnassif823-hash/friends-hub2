@@ -5,11 +5,14 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 create table public.profiles (
   id uuid default uuid_generate_v4() primary key,
   username text unique not null,
-  avatar_url text, -- Store URL to avatar image
-  status text default 'Available', -- Available, Busy, Away, Code Red
+  avatar_url text, 
+  status text default 'Available',
   status_message text,
   location_lat float,
   location_lng float,
+  is_visible boolean default true, -- Ghost Mode
+  status_since timestamptz default now(), -- Time of status set
+  location_text text, -- Manual location name (e.g. "Starbucks")
   last_seen timestamptz default now(),
   created_at timestamptz default now()
 );

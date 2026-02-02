@@ -92,6 +92,11 @@ export const AuthProvider = ({ children }) => {
         if (!user) return;
 
         try {
+            // If status is changing, update the timestamp
+            if (updates.status && updates.status !== user.status) {
+                updates.status_since = new Date().toISOString();
+            }
+
             const { data, error } = await supabase
                 .from('profiles')
                 .update(updates)
