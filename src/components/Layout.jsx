@@ -130,6 +130,9 @@ const Layout = () => {
                             <span>Logout</span>
                         </button>
                     </div>
+                    <div className="p-2 text-center text-[10px] text-slate-600">
+                        v2.1 (Live)
+                    </div>
                 </div>
             </aside>
 
