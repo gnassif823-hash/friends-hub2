@@ -10,14 +10,13 @@ import {
     Settings,
     LogOut,
     Menu,
-    X,
-    Shield
+    X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import clsx from 'clsx';
 
 const Layout = () => {
-    const { user, logout, isAdmin } = useAuth();
+    const { user, logout } = useAuth();
     const location = useLocation();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
 
@@ -41,10 +40,6 @@ const Layout = () => {
         { name: 'Events', icon: Calendar, path: '/events' },
         { name: 'Call Center', icon: Video, path: '/call' },
     ];
-
-    if (isAdmin) {
-        navItems.push({ name: 'Admin Control', icon: Shield, path: '/admin' });
-    }
 
     const handleLogout = () => {
         if (confirm('Are you sure you want to leave?')) {
@@ -105,8 +100,7 @@ const Layout = () => {
                                     "flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200",
                                     isActive
                                         ? "bg-violet-600/10 text-violet-400 border border-violet-600/20 shadow-[0_0_15px_-5px_var(--color-brand-primary)]"
-                                        : "text-slate-400 hover:bg-slate-800 hover:text-slate-200",
-                                    item.name === 'Admin Control' && "text-red-400 hover:text-red-300"
+                                        : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
                                 )}
                             >
                                 <item.icon className="w-5 h-5" />
@@ -138,7 +132,7 @@ const Layout = () => {
                         </button>
                     </div>
                     <div className="p-2 text-center text-[10px] text-slate-600">
-                        v2.2 (Admin)
+                        v2.2
                     </div>
                 </div>
             </aside>
