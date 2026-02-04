@@ -10,13 +10,14 @@ import {
     Settings,
     LogOut,
     Menu,
-    X
+    X,
+    Shield
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import clsx from 'clsx';
 
 const Layout = () => {
-    const { user, logout } = useAuth();
+    const { user, logout, isAdmin } = useAuth();
     const location = useLocation();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
 
@@ -36,10 +37,14 @@ const Layout = () => {
         { name: 'Live Map', icon: Map, path: '/map' },
         { name: 'The Lounge', icon: MessageCircle, path: '/lounge' },
         { name: 'Photo Gallery', icon: Image, path: '/gallery' },
-        { name: 'Reels', icon: Video, path: '/reels' }, // Using Video icon for Reels
+        { name: 'Reels', icon: Video, path: '/reels' },
         { name: 'Events', icon: Calendar, path: '/events' },
-        { name: 'Call Center', icon: Video, path: '/call' }, // Reusing Video icon is fine, or importing Phone
+        { name: 'Call Center', icon: Video, path: '/call' },
     ];
+
+    if (isAdmin) {
+        navItems.push({ name: 'Admin Control', icon: Shield, path: '/admin' });
+    }
 
     const handleLogout = () => {
         if (confirm('Are you sure you want to leave?')) {
@@ -85,7 +90,7 @@ const Layout = () => {
                         </div>
                         <div className="min-w-0">
                             <p className="font-semibold text-sm truncate">{user?.username}</p>
-                            <p className="text-xs text-slate-400 truncate">{user?.status}</p>
+                            <p className="text-xs text-slate-400 truncate">{user?.role === 'admin' ? 'Administrator' : user?.status}</p>
                         </div>
                     </div>
 
@@ -100,7 +105,8 @@ const Layout = () => {
                                     "flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200",
                                     isActive
                                         ? "bg-violet-600/10 text-violet-400 border border-violet-600/20 shadow-[0_0_15px_-5px_var(--color-brand-primary)]"
-                                        : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                                        : "text-slate-400 hover:bg-slate-800 hover:text-slate-200",
+                                    item.name === 'Admin Control' && "text-red-400 hover:text-red-300"
                                 )}
                             >
                                 <item.icon className="w-5 h-5" />
@@ -132,7 +138,7 @@ const Layout = () => {
                         </button>
                     </div>
                     <div className="p-2 text-center text-[10px] text-slate-600">
-                        v2.1 (Live)
+                        v2.2 (Admin)
                     </div>
                 </div>
             </aside>

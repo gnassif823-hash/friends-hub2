@@ -17,7 +17,7 @@ export const AuthProvider = ({ children }) => {
             if (savedUser) {
                 try {
                     const parsedUser = JSON.parse(savedUser);
-                    // Verify user still exists in DB by ID
+                    // Verify user still exists in DB by ID and get fresh status
                     const { data, error } = await supabase
                         .from('profiles')
                         .select('*')
@@ -25,7 +25,12 @@ export const AuthProvider = ({ children }) => {
                         .single();
 
                     if (data && !error) {
-                        setUser(data);
+                        if (data.account_status === 'banned') {
+                            alert("Your account has been banned.");
+                            logout();
+                        } else {
+                            setUser(data);
+                        }
                     } else {
                         // If not found (deleted?), clear session
                         localStorage.removeItem('friends_hub_user');
@@ -56,7 +61,11 @@ export const AuthProvider = ({ children }) => {
 
             let currentUser = existingUser;
 
-            if (!existingUser) {
+            if (existingUser) {
+                if (existingUser.account_status === 'banned') {
+                    throw new Error("This account has been banned.");
+                }
+            } else {
                 // 2. Create new user if not found
                 // Note: We let Supabase generate the UUID (v4)
                 const { data: newUser, error: createError } = await supabase
@@ -66,7 +75,9 @@ export const AuthProvider = ({ children }) => {
                             username,
                             avatar_url: `https://api.dicebear.com/9.x/avataaars/svg?seed=${username}`,
                             status: 'Available',
-                            is_visible: true
+                            is_visible: true,
+                            role: 'user', // Default
+                            account_status: 'pending' // Default to pending for approval
                         }
                     ])
                     .select()
@@ -118,8 +129,11 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const isAdmin = user?.role === 'admin';
+    const isPending = user?.account_status === 'pending';
+
     return (
-        <AuthContext.Provider value={{ user, loading, login, logout, updateProfile }}>
+        <AuthContext.Provider value={{ user, loading, login, logout, updateProfile, isAdmin, isPending }}>
             {children}
         </AuthContext.Provider>
     );
