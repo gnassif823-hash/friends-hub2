@@ -157,16 +157,15 @@ const Settings = () => {
                     </div>
                 </form>
             </div>
+
+            {/* Hidden Message */}
+            <div className="text-center opacity-0 hover:opacity-100 transition-opacity duration-1000 p-8 select-none">
+                <p className="text-[10px] text-slate-800 italic font-serif">
+                    "Sometimes friends weigh more than gold, so please never forget your friends.
+                    Not only in hanging out, but also in your heart. Never leave a friend behind."
+                </p>
+            </div>
         </div>
-            
-            {/* Hidden Message */ }
-    <div className="text-center opacity-0 hover:opacity-100 transition-opacity duration-1000 p-8 select-none">
-        <p className="text-[10px] text-slate-800 italic font-serif">
-            "Sometimes friends weigh more than gold, so please never forget your friends.
-            Not only in hanging out, but also in your heart. Never leave a friend behind."
-        </p>
-    </div>
-        </div >
     );
 };
 
