@@ -34,6 +34,7 @@ const Lounge = () => {
         fetchMessages();
 
         // Subscribe to new messages
+        // Subscribe to new messages and deletions
         const channel = supabase
             .channel('public:messages')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
@@ -51,6 +52,9 @@ const Lounge = () => {
 
                 setMessages((prev) => [...prev, messageWithUser]);
                 setTimeout(scrollToBottom, 100);
+            })
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
+                setMessages((prev) => prev.filter(msg => msg.id !== payload.old.id));
             })
             .subscribe();
 
@@ -74,6 +78,12 @@ const Lounge = () => {
             console.error('Error sending message:', error);
             // Optional: Show error toast
         }
+    };
+
+    const handleDeleteMessage = async (id) => {
+        if (!confirm("Delete this message?")) return;
+        const { error } = await supabase.from('messages').delete().eq('id', id);
+        if (error) console.error("Error deleting message:", error);
     };
 
     return (
@@ -102,7 +112,7 @@ const Lounge = () => {
                         return (
                             <div
                                 key={msg.id}
-                                className={`flex gap-3 ${isMe ? 'flex-row-reverse' : 'flex-row'} ${isSequential ? 'mt-1' : 'mt-4'}`}
+                                className={`flex gap-3 ${isMe ? 'flex-row-reverse' : 'flex-row'} ${isSequential ? 'mt-1' : 'mt-4'} group`}
                             >
                                 {!isSequential && (
                                     <img
@@ -113,19 +123,31 @@ const Lounge = () => {
                                 )}
                                 {isSequential && <div className="w-8 flex-shrink-0" />}
 
-                                <div
-                                    className={`max-w-[70%] sm:max-w-[60%] px-4 py-2 rounded-2xl text-sm break-words ${isMe
+                                <div className="flex flex-col items-end">
+                                    <div
+                                        className={`max-w-[70%] sm:max-w-[60%] px-4 py-2 rounded-2xl text-sm break-words relative ${isMe
                                             ? 'bg-violet-600 text-white rounded-br-none'
                                             : 'bg-slate-800 text-slate-200 rounded-bl-none border border-slate-700'
-                                        }`}
-                                >
-                                    {!isMe && !isSequential && (
-                                        <p className="text-xs text-violet-300 mb-1 font-bold">{msg.profiles?.username || 'Unknown'}</p>
+                                            }`}
+                                    >
+                                        {!isMe && !isSequential && (
+                                            <p className="text-xs text-violet-300 mb-1 font-bold">{msg.profiles?.username || 'Unknown'}</p>
+                                        )}
+                                        {msg.content}
+                                        <div className="flex items-center justify-end gap-2 mt-1 opacity-70">
+                                            <p className={`text-[10px] ${isMe ? 'text-violet-200' : 'text-slate-500'}`}>
+                                                {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    {isMe && (
+                                        <button
+                                            onClick={() => handleDeleteMessage(msg.id)}
+                                            className="text-[10px] text-red-500 opacity-0 group-hover:opacity-100 transition-opacity mt-1 hover:underline"
+                                        >
+                                            Delete
+                                        </button>
                                     )}
-                                    {msg.content}
-                                    <p className={`text-[10px] mt-1 text-right opacity-70 ${isMe ? 'text-violet-200' : 'text-slate-500'}`}>
-                                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    </p>
                                 </div>
                             </div>
                         );

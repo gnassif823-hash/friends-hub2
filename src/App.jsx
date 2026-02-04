@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import LiveMap from './pages/LiveMap';
 import Lounge from './pages/Lounge';
 import Gallery from './pages/Gallery';
+import Reels from './pages/Reels';
 import Events from './pages/Events';
 import CallCenter from './pages/CallCenter';
 import Settings from './pages/Settings';
@@ -35,6 +36,7 @@ function AppRoutes() {
         <Route path="map" element={<LiveMap />} />
         <Route path="lounge" element={<Lounge />} />
         <Route path="gallery" element={<Gallery />} />
+        <Route path="reels" element={<Reels />} />
         <Route path="events" element={<Events />} />
         <Route path="call" element={<CallCenter />} />
         <Route path="settings" element={<Settings />} />

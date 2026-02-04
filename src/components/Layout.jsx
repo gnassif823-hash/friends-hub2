@@ -35,9 +35,10 @@ const Layout = () => {
         { name: 'Dashboard', icon: Home, path: '/' },
         { name: 'Live Map', icon: Map, path: '/map' },
         { name: 'The Lounge', icon: MessageCircle, path: '/lounge' },
-        { name: 'Gallery', icon: Image, path: '/gallery' },
+        { name: 'Photo Gallery', icon: Image, path: '/gallery' },
+        { name: 'Reels', icon: Video, path: '/reels' }, // Using Video icon for Reels
         { name: 'Events', icon: Calendar, path: '/events' },
-        { name: 'Call Center', icon: Video, path: '/call' },
+        { name: 'Call Center', icon: Video, path: '/call' }, // Reusing Video icon is fine, or importing Phone
     ];
 
     const handleLogout = () => {

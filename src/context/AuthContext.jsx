@@ -17,7 +17,7 @@ export const AuthProvider = ({ children }) => {
             if (savedUser) {
                 try {
                     const parsedUser = JSON.parse(savedUser);
-                    // Verify user still exists in DB
+                    // Verify user still exists in DB by ID
                     const { data, error } = await supabase
                         .from('profiles')
                         .select('*')
@@ -26,8 +26,8 @@ export const AuthProvider = ({ children }) => {
 
                     if (data && !error) {
                         setUser(data);
-                        // Optionally update last_seen here
                     } else {
+                        // If not found (deleted?), clear session
                         localStorage.removeItem('friends_hub_user');
                     }
                 } catch (e) {
@@ -43,7 +43,7 @@ export const AuthProvider = ({ children }) => {
 
     const login = async (username) => {
         try {
-            // Check if user exists
+            // 1. Try to find existing user by username
             let { data: existingUser, error: fetchError } = await supabase
                 .from('profiles')
                 .select('*')
@@ -57,14 +57,16 @@ export const AuthProvider = ({ children }) => {
             let currentUser = existingUser;
 
             if (!existingUser) {
-                // Create new user
+                // 2. Create new user if not found
+                // Note: We let Supabase generate the UUID (v4)
                 const { data: newUser, error: createError } = await supabase
                     .from('profiles')
                     .insert([
                         {
                             username,
                             avatar_url: `https://api.dicebear.com/9.x/avataaars/svg?seed=${username}`,
-                            status: 'Available'
+                            status: 'Available',
+                            is_visible: true
                         }
                     ])
                     .select()
@@ -74,6 +76,7 @@ export const AuthProvider = ({ children }) => {
                 currentUser = newUser;
             }
 
+            // 3. Set Session
             setUser(currentUser);
             localStorage.setItem('friends_hub_user', JSON.stringify(currentUser));
             return currentUser;
@@ -92,8 +95,8 @@ export const AuthProvider = ({ children }) => {
         if (!user) return;
 
         try {
-            // If status is changing, update the timestamp
             if (updates.status && updates.status !== user.status) {
+                // If status changes, update timestamp
                 updates.status_since = new Date().toISOString();
             }
 

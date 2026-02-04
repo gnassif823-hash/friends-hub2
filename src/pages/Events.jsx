@@ -86,7 +86,13 @@ const Events = () => {
             .from('event_participants')
             .upsert([{ event_id: eventId, user_id: user.id, status }]);
 
-        if (error) console.error(error);
+        if (error) {
+            console.error(error);
+            alert("Error joining event. Check console.");
+        } else {
+            // Optional: Provide visual feedback if needed, but Realtime update should handle the UI
+            // fetchEvents(); // Realtime listener handles this
+        }
     };
 
     const resetForm = () => {

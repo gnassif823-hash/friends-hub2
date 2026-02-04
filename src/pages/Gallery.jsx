@@ -25,10 +25,12 @@ const Gallery = () => {
 
         const channel = supabase
             .channel('public:photos')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'photos' }, (payload) => {
-                // We need to fetch the profile for the new photo
-                // For simplicity/rapidity in this "real-time" demo, we just refetch all or we could fetch single
-                fetchPhotos();
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'photos' }, (payload) => {
+                if (payload.eventType === 'DELETE') {
+                    setPhotos(prev => prev.filter(p => p.id !== payload.old.id));
+                } else {
+                    fetchPhotos();
+                }
             })
             .subscribe();
 
@@ -74,9 +76,28 @@ const Gallery = () => {
             setCaption('');
         } catch (error) {
             console.error('Upload error:', error);
-            alert('Failed to upload. Make sure "gallery" bucket exists and is public.');
+            alert(`Upload Failed: ${error.message || JSON.stringify(error)}`);
         } finally {
             setUploading(false);
+        }
+    };
+
+    const handleDelete = async (photo) => {
+        if (!confirm("Delete this photo?")) return;
+
+        // Try to delete from storage (best effort, relies on url parsing)
+        try {
+            const path = photo.url.split('/').pop(); // simplistic, works for our flat structure
+            if (path) {
+                await supabase.storage.from('gallery').remove([path]);
+            }
+        } catch (e) {
+            console.error("Storage delete fail", e);
+        }
+
+        const { error } = await supabase.from('photos').delete().eq('id', photo.id);
+        if (error) {
+            alert("Failed to delete photo");
         }
     };
 
@@ -107,6 +128,19 @@ const Gallery = () => {
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4">
                             <p className="text-white font-medium text-sm truncate">{photo.caption}</p>
                             <p className="text-slate-400 text-xs">by {photo.profiles?.username}</p>
+
+                            {photo.uploader_id === user.id && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDelete(photo);
+                                    }}
+                                    className="absolute top-2 right-2 bg-red-600/80 hover:bg-red-600 text-white p-1.5 rounded-full"
+                                    title="Delete Photo"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            )}
                         </div>
                     </div>
                 ))}

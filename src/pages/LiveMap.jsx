@@ -111,12 +111,27 @@ const PoiLayer = ({ showPois }) => {
     );
 };
 
+// Helper to auto-center
+const RecenterMap = ({ center }) => {
+    const map = useMap();
+    const [hasCentered, setHasCentered] = useState(false);
+
+    useEffect(() => {
+        if (center && !hasCentered) {
+            map.flyTo(center, 15, { animate: true });
+            setHasCentered(true);
+        }
+    }, [center, map, hasCentered]);
+
+    return null;
+};
+
 const LiveMap = () => {
     const { user, updateProfile } = useAuth();
     const [friends, setFriends] = useState([]);
     const [myPosition, setMyPosition] = useState(null);
     const [isGhostMode, setIsGhostMode] = useState(user.is_visible === false);
-    const [showPois, setShowPois] = useState(false);
+    const [showPois, setShowPois] = useState(true); // Default to TRUE as requested
 
     const createCustomIcon = (avatarUrl) => {
         return L.divIcon({
@@ -134,9 +149,29 @@ const LiveMap = () => {
     };
 
     useEffect(() => {
+        // Restore saved position if available
         if (user.location_lat && user.location_lng) {
             setMyPosition({ lat: user.location_lat, lng: user.location_lng });
         }
+
+        // Auto-locate on startup if no position or just to be helpful
+        if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition((position) => {
+                const newPos = {
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude
+                };
+                setMyPosition(newPos);
+                // Also update DB immediately so they appear online
+                updateProfile({
+                    location_lat: newPos.lat,
+                    location_lng: newPos.lng
+                });
+            }, (error) => {
+                console.warn("Geolocation error:", error);
+            });
+        }
+
         setIsGhostMode(user.is_visible === false);
     }, [user]);
 
@@ -162,8 +197,7 @@ const LiveMap = () => {
                 .from('profiles')
                 .select('*')
                 .neq('id', user.id)
-                .eq('is_visible', true) // Only visible friends
-                .not('location_lat', 'is', null);
+                .not('location_lat', 'is', null); // Only show people with location
 
             if (data) setFriends(data);
         };
@@ -171,34 +205,24 @@ const LiveMap = () => {
         fetchFriends();
 
         const channel = supabase
-            .channel('public:map_profiles_v2')
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
-                if (payload.new.id === user.id) return;
+            .channel('public:profiles_map')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
+                // If it's me, ignore
+                if (payload.new && payload.new.id === user.id) return;
 
-                // If friend goes invisible or location wiped, remove them
-                if (payload.new.is_visible === false || !payload.new.location_lat) {
-                    setFriends(prev => prev.filter(f => f.id !== payload.new.id));
-                    return;
-                }
-
-                setFriends((prev) => {
-                    const exists = prev.find(f => f.id === payload.new.id);
-                    if (exists) {
-                        return prev.map(f => f.id === payload.new.id ? payload.new : f);
-                    } else {
-                        return [...prev, payload.new];
-                    }
-                });
+                // Simple strategy: Just refetch everyone to ensure state is consistent
+                // This avoids complex merge logic errors
+                fetchFriends();
             })
             .subscribe();
 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, []);
+    }, [user.id]);
 
     const defaultCenter = [40.7128, -74.0060];
-    const center = myPosition || defaultCenter;
+    const center = myPosition ? [myPosition.lat, myPosition.lng] : defaultCenter;
 
     return (
         <div className="h-[calc(100vh-8rem)] md:h-[calc(100vh-5rem)] rounded-2xl overflow-hidden border border-slate-800 shadow-2xl relative">
@@ -213,6 +237,9 @@ const LiveMap = () => {
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
                     url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
                 />
+
+                {/* Force Auto-Center */}
+                {myPosition && <RecenterMap center={[myPosition.lat, myPosition.lng]} />}
 
                 {/* Friends Markers */}
                 {friends.map(friend => (
@@ -246,8 +273,8 @@ const LiveMap = () => {
                 <button
                     onClick={toggleGhostMode}
                     className={`p-3 rounded-full shadow-xl border-2 transition-all ${isGhostMode
-                            ? 'bg-slate-800 text-slate-400 border-slate-600'
-                            : 'bg-violet-600 text-white border-white'
+                        ? 'bg-slate-800 text-slate-400 border-slate-600'
+                        : 'bg-violet-600 text-white border-white'
                         }`}
                     title={isGhostMode ? "You are invisible" : "You are visible"}
                 >
@@ -257,8 +284,8 @@ const LiveMap = () => {
                 <button
                     onClick={() => setShowPois(!showPois)}
                     className={`p-3 rounded-full shadow-xl border-2 transition-all ${showPois
-                            ? 'bg-amber-600 text-white border-white'
-                            : 'bg-slate-800 text-amber-400 border-slate-600'
+                        ? 'bg-amber-600 text-white border-white'
+                        : 'bg-slate-800 text-amber-400 border-slate-600'
                         }`}
                     title="Show Places (Cafes/Restaurants)"
                 >

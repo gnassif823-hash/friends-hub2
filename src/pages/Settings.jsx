@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Save, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { Save, AlertCircle, Eye, EyeOff, Upload } from 'lucide-react';
 
 const Settings = () => {
     const { user, updateProfile } = useAuth();
     const [username, setUsername] = useState(user?.username || '');
     const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || '');
+    const [avatarFile, setAvatarFile] = useState(null);
     const [statusMessage, setStatusMessage] = useState(user?.status_message || '');
     const [isVisible, setIsVisible] = useState(user?.is_visible !== false); // Default true
     const [message, setMessage] = useState({ type: '', text: '' });
@@ -17,15 +19,34 @@ const Settings = () => {
         setMessage({ type: '', text: '' });
 
         try {
+            let finalAvatarUrl = avatarUrl;
+
+            if (avatarFile) {
+                const fileExt = avatarFile.name.split('.').pop();
+                const fileName = `avatar_${user.id}_${Math.random()}.${fileExt}`;
+                const { error: uploadError } = await supabase.storage
+                    .from('gallery') // Reusing gallery bucket as it is publicly accessible
+                    .upload(fileName, avatarFile);
+
+                if (uploadError) throw uploadError;
+
+                const { data: { publicUrl } } = supabase.storage
+                    .from('gallery')
+                    .getPublicUrl(fileName);
+
+                finalAvatarUrl = publicUrl;
+            }
+
             await updateProfile({
                 username,
-                avatar_url: avatarUrl,
+                avatar_url: finalAvatarUrl,
                 status_message: statusMessage,
                 is_visible: isVisible
             });
             setMessage({ type: 'success', text: 'Profile updated successfully!' });
         } catch (error) {
-            setMessage({ type: 'error', text: 'Failed to update profile.' });
+            console.error(error);
+            setMessage({ type: 'error', text: 'Failed to update profile: ' + error.message });
         } finally {
             setLoading(false);
         }
@@ -65,14 +86,28 @@ const Settings = () => {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-slate-400 mb-2">Avatar URL</label>
-                            <input
-                                type="text"
-                                value={avatarUrl}
-                                onChange={(e) => setAvatarUrl(e.target.value)}
-                                placeholder="https://..."
-                                className="w-full bg-slate-800 border-slate-700 text-slate-100 p-3 rounded-xl focus:ring-2 focus:ring-violet-500 outline-none"
-                            />
+                            <label className="block text-sm font-medium text-slate-400 mb-2">Profile Picture</label>
+                            <div className="flex items-center gap-4">
+                                <label className="cursor-pointer bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-4 py-2 rounded-xl transition-colors text-sm font-medium flex items-center gap-2">
+                                    <Upload className="w-4 h-4" />
+                                    Choose Message
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            const file = e.target.files[0];
+                                            if (file) {
+                                                setAvatarFile(file);
+                                                setAvatarUrl(URL.createObjectURL(file)); // Preview
+                                            }
+                                        }}
+                                    />
+                                </label>
+                                <span className="text-xs text-slate-500">
+                                    {avatarFile ? avatarFile.name : 'No file chosen'}
+                                </span>
+                            </div>
                         </div>
 
                         <div>
@@ -80,8 +115,8 @@ const Settings = () => {
                             <div
                                 onClick={() => setIsVisible(!isVisible)}
                                 className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${isVisible
-                                        ? 'bg-violet-900/10 border-violet-500/30'
-                                        : 'bg-slate-800 border-slate-700'
+                                    ? 'bg-violet-900/10 border-violet-500/30'
+                                    : 'bg-slate-800 border-slate-700'
                                     }`}
                             >
                                 <div className="flex items-center gap-3">
