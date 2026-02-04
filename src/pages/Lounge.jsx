@@ -1,27 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { Send, User } from 'lucide-react';
+import { Send, Trash2, Image as ImageIcon, X } from 'lucide-react';
 
 const Lounge = () => {
     const { user } = useAuth();
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState('');
+    const [uploading, setUploading] = useState(false);
+    const [selectedFile, setSelectedFile] = useState(null);
     const messagesEndRef = useRef(null);
+    const fileInputRef = useRef(null);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
     useEffect(() => {
-        // Initial fetch of last 50 messages
         const fetchMessages = async () => {
             const { data, error } = await supabase
                 .from('messages')
                 .select(`
-          *,
-          profiles:user_id (username, avatar_url)
-        `)
+                    *,
+                    profiles:user_id (username, avatar_url)
+                `)
                 .order('created_at', { ascending: true })
                 .limit(50);
 
@@ -33,12 +35,9 @@ const Lounge = () => {
 
         fetchMessages();
 
-        // Subscribe to new messages
-        // Subscribe to new messages and deletions
         const channel = supabase
             .channel('public:messages')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
-                // Fetch the sender profile for the new message
                 const { data: userData } = await supabase
                     .from('profiles')
                     .select('username, avatar_url')
@@ -63,20 +62,56 @@ const Lounge = () => {
         };
     }, []);
 
+    const handleFileSelect = (e) => {
+        const file = e.target.files[0];
+        if (file) setSelectedFile(file);
+    };
+
     const handleSendMessage = async (e) => {
         e.preventDefault();
-        if (!newMessage.trim()) return;
+        if ((!newMessage.trim() && !selectedFile) || uploading) return;
 
-        const content = newMessage.trim();
-        setNewMessage('');
+        setUploading(true);
+        try {
+            let imageUrl = null;
+            const content = newMessage.trim();
 
-        const { error } = await supabase
-            .from('messages')
-            .insert([{ user_id: user.id, content }]);
+            if (selectedFile) {
+                const fileExt = selectedFile.name.split('.').pop();
+                const fileName = `chat_${Math.random()}.${fileExt}`;
+                const { error: uploadError } = await supabase.storage
+                    .from('gallery')
+                    .upload(fileName, selectedFile);
 
-        if (error) {
-            console.error('Error sending message:', error);
-            // Optional: Show error toast
+                if (uploadError) throw uploadError;
+
+                const { data: { publicUrl } } = supabase.storage
+                    .from('gallery')
+                    .getPublicUrl(fileName);
+
+                imageUrl = publicUrl;
+            }
+
+            const { error } = await supabase
+                .from('messages')
+                .insert([{
+                    user_id: user.id,
+                    content: content,
+                    image_url: imageUrl
+                }]);
+
+            if (error) {
+                console.error('Error sending message:', error);
+                alert("Failed to send message");
+            } else {
+                setNewMessage('');
+                setSelectedFile(null);
+            }
+        } catch (error) {
+            console.error("Error:", error);
+            alert("Error sending message");
+        } finally {
+            setUploading(false);
         }
     };
 
@@ -123,9 +158,9 @@ const Lounge = () => {
                                 )}
                                 {isSequential && <div className="w-8 flex-shrink-0" />}
 
-                                <div className="flex flex-col items-end">
+                                <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[75%] sm:max-w-[60%]`}>
                                     <div
-                                        className={`max-w-[70%] sm:max-w-[60%] px-4 py-2 rounded-2xl text-sm break-words relative ${isMe
+                                        className={`px-4 py-2 rounded-2xl text-sm break-words relative w-fit shadow-md ${isMe
                                             ? 'bg-violet-600 text-white rounded-br-none'
                                             : 'bg-slate-800 text-slate-200 rounded-bl-none border border-slate-700'
                                             }`}
@@ -133,7 +168,17 @@ const Lounge = () => {
                                         {!isMe && !isSequential && (
                                             <p className="text-xs text-violet-300 mb-1 font-bold">{msg.profiles?.username || 'Unknown'}</p>
                                         )}
-                                        {msg.content}
+
+                                        {msg.image_url && (
+                                            <img
+                                                src={msg.image_url}
+                                                alt="Shared content"
+                                                className="rounded-lg mb-2 max-h-60 object-cover w-full border border-white/10"
+                                            />
+                                        )}
+
+                                        {msg.content && <p>{msg.content}</p>}
+
                                         <div className="flex items-center justify-end gap-2 mt-1 opacity-70">
                                             <p className={`text-[10px] ${isMe ? 'text-violet-200' : 'text-slate-500'}`}>
                                                 {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -143,9 +188,10 @@ const Lounge = () => {
                                     {isMe && (
                                         <button
                                             onClick={() => handleDeleteMessage(msg.id)}
-                                            className="text-[10px] text-red-500 opacity-0 group-hover:opacity-100 transition-opacity mt-1 hover:underline"
+                                            className="text-slate-500 hover:text-red-500 transition-colors mt-1 p-1"
+                                            title="Delete Message"
                                         >
-                                            Delete
+                                            <Trash2 className="w-3 h-3" />
                                         </button>
                                     )}
                                 </div>
@@ -158,17 +204,40 @@ const Lounge = () => {
 
             {/* Input Area */}
             <div className="p-4 bg-slate-800 border-t border-slate-700">
-                <form onSubmit={handleSendMessage} className="flex gap-2">
+                {selectedFile && (
+                    <div className="flex items-center justify-between bg-slate-700/50 p-2 rounded-lg mb-2 text-xs">
+                        <span className="truncate max-w-[200px]">{selectedFile.name}</span>
+                        <button onClick={() => setSelectedFile(null)} className="text-slate-400 hover:text-white">
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                )}
+                <form onSubmit={handleSendMessage} className="flex gap-2 items-end">
+                    <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="p-3 text-slate-400 hover:text-white bg-slate-900 rounded-xl border border-slate-700 hover:bg-slate-700 transition-colors"
+                    >
+                        <ImageIcon className="w-5 h-5" />
+                    </button>
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        accept="image/*"
+                    />
+
                     <input
                         type="text"
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
-                        placeholder="Say something..."
-                        className="flex-1 bg-slate-900 border-transparent text-slate-100 placeholder-slate-500 rounded-xl px-4 focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 outline-none transition-all"
+                        placeholder="Type a message..."
+                        className="flex-1 bg-slate-900 border-transparent text-slate-100 placeholder-slate-500 rounded-xl px-4 py-3 focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 outline-none transition-all"
                     />
                     <button
                         type="submit"
-                        disabled={!newMessage.trim()}
+                        disabled={(!newMessage.trim() && !selectedFile) || uploading}
                         className="bg-violet-600 hover:bg-violet-500 text-white p-3 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <Send className="w-5 h-5" />
